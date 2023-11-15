@@ -1,0 +1,68 @@
+{{< pagebreak >}}
+## Delta Method Normality
+
+Delta method normality is theorem that can be used to derive the distribution of a function of an asymptotically normal variable. Combining the advantages of the two powerful statistic concepts: **large sample normality** and **delta method**, it is very useful to approximate probability distribution for a function of an asymptotically normal statistical estimator from knowledge of the limiting variance of that estimator [@kelley1928]. The main appealing feature of this method is that we don't need know much about the expected value and variance of the function $g$ due to its asymptotic normality.
+
+### Univariate Delta Method
+
+If $Y \overset{\bullet}{\sim} N(\mu, \sigma^2)$ and there exist a transformation function $g$ and value $\mu$ and $g'(\mu)\ne0$, then the Taylor series expansion (Taylor approximation) is used to derive variation around a point [@doob1935]:
+
+$$
+g(Y)\overset{\bullet}{\sim}N\Big(g(\mu), \left.[g'(\mu)\right]^2\sigma^2\Big)
+$${#eq-delta} 
+
+Now consider i.i.d. sample $Y_i$ for $g(\bar{Y})$ as a sequence of RVs such that $Y_n\overset{\bullet}{\sim}N(\mu, \sigma^2/n)$. For a function $g$ and value $\theta_0$ where $g'(\theta_0)$ exists and is not 0, we approximate the distribution of $g(Y_n)$ using Delta method:
+
+$$
+g(Y_n)\overset{\bullet}{\sim}N\Big(g(\theta_0), \left.[g'(\theta_0)\right]^2\sigma^2/n\Big)
+$$
+
+```{r}
+# estimates
+lambdas_estimated <- -1/df$x * log(df$y)
+
+# distribution of empirical lambda
+hist(lambdas_estimated, freq = F, main = "", xlab = "")
+curve(dnorm(x, mean(lambdas_estimated), sd(lambdas_estimated)), add = T)
+title(main = "Histogram of estimated lambda (n = " %&% n %&% ")", xlab = "estimated lambda")
+```
+
+
+### Bivariate Delta Method
+
+For a two-variable function $Z=g(X, Y)=-\frac{1}{X}\ln Y$:
+
+$$
+\begin{aligned}
+Z&=g(X, Y) \\
+&\approx g(\mu_X,\mu_Y)+(X-\mu_X)\partial_x g(\mu)+(Y-\mu_Y)\partial_y g(\mu) \\
+&+ \frac{1}{2}(X-\mu_X)^2\partial_x^2 g(\mu) + \frac{1}{2}(Y-\mu_Y)^2\partial_y^2 g(\mu) \\
+&+ (X-\mu_X)(Y-\mu_Y)\partial_{xy}^2 g(\mu)\\ \\
+E[Z]&\approx g(\mu_X,\mu_Y) \\
+Var(Z) &\approx \left.(\partial_x g(\mu_X,\mu_Y)\right)^2\sigma_X^2 + \left.(\partial_y g(\mu_X,\mu_Y)\right)^2\sigma_Y^2+2\sigma_{XY}\partial_x g(\mu_X,\mu_Y)\partial_y g(\mu_X,\mu_Y) \\
+\Rightarrow
+g(X,Y) &\overset{\bullet}{\sim}N\Big(g(\mu_X,\mu_Y), \left.[g'(\theta_0)\right]^2\sigma^2/n\Big) 
+\end{aligned}
+$$
+
+### Delta Method Results
+
+With the estimator of our model parameter $\hat{\lambda}$ (@eq-lambda), we have $g(Y) = -\frac{1}{x}\ln Y$. Therefore, we can estimate the distribution of the model parameter:
+
+```{r}
+# g(Y_n)
+gs <- -1/df$x * log(df$y)
+
+# CI
+tbl_delta1 <- tibble(
+  method = "Delta Method Normality", 
+  lambda = mean(gs),
+  std.error =  sd(gs)/sqrt(n),
+  lower_0.95 = mean(gs) + qt(0.05/2, n-1) * std.error,
+  upper_0.95 = mean(gs) - qt(0.05/2, n-1) * std.error,
+  width = upper_0.95 - lower_0.95)
+tbl_delta1
+```
+
+Note that we use t-distribution to compute the $100(1-\alpha)\%$ CI.
+

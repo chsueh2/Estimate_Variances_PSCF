@@ -1,0 +1,101 @@
+{{< pagebreak >}}
+## Study Case: Attenuation Decay
+
+In this work, we will use a simulated data set (details given later) to study a physical model **attenuation decay**.
+
+### Physical Model
+::: {.callout-note icon=false}
+### Physical Model: Radiation strength measured at distance $x$
+
+$$y = e^{-\lambda x}$${#eq-lambda} 
+
+- Response variable: $y=$ radiation strength
+- Explanatory variable (numeric): $x=$ distance
+- Parameter of interest: $\lambda =$ attenuation coefficient.
+- Estimator: $\hat{\lambda} = -\frac{1}{x}\ln y$
+
+Goal: Estimate the parameter $\lambda$ and its standard error
+:::
+
+We treat the parameter $\lambda$ as a random variable and follows a normal distribution. By central limit theorem (CLT), the sample mean of a random sample with sample size $n$ is also distributed normally:
+
+$$
+\begin{aligned}
+\lambda_i &\overset{iid}{\sim} N(\mu, \sigma^2) \\
+\Rightarrow
+\bar{\lambda} &= \frac{1}{n} \sum_{i=1}^n \lambda_i \sim N(\mu, \sigma^2/n)
+\end{aligned}
+$${#eq-lambda-avg} 
+
+### Data Simulation and Visualization
+
+To make the analysis reproducible, we set the seed of the random generator:
+
+```{r}
+# seed for random generator
+seed <- 2023
+
+# sample size
+n <- 100
+
+# model function and its inverse
+fmod <- function(x, lambda){ exp(-lambda*x) }
+fmod_inv <- function(y, x){ -log(y)/x }
+
+# parameter - truth
+lambda_mean <- 3
+lambda_sd <- 1
+```
+
+We also assume $\lambda_i\sim N(`r lambda_mean`, `r lambda_sd^2`)$. With sample size of `r n`, the standard error of the sample mean is `r lambda_sd/sqrt(n)`.
+
+Next, we generate a simulated measurement data. For each measurement, $y$ represents the recorded radiation strength measured at distance $x$.
+
+```{r}
+# make this analysis reproducible
+set.seed(seed)
+
+# parameter - random samples
+lambdas <- rnorm(n, lambda_mean, lambda_sd)
+
+# histogram of lambda RS
+hist(lambdas, breaks = 10, freq = F, main = "", xlab = "")
+curve(dnorm(x, lambda_mean, lambda_sd), add = T)
+title(main = "Histogram of lambda (n = " %&% n %&% ")", xlab = "lambda")
+
+# create simulated data
+df <- tibble(
+  lambda = lambdas,
+  x = rep_len( (1:30)/10, n) %>% sort(),
+  ) %>%
+  mutate(y = fmod(x, lambda)) %>%
+  relocate(x, y, lambda)
+```
+
+The data set contains `r n` observations of the radiation strength and measurement distance.
+
+```{r}
+# exam data set
+df %>% select(-lambda)
+
+# scatter plot between measured strength y and distance x
+plot(df$x, df$y, xlab = "x (measurement distance)", ylab = "y (measured radiation strength)")
+```
+
+It's clearly to see the decay trend described in the physical model (the decay equation) and the randomness due to the uncertainty of the model parameter.
+
+```{r}
+# Save session variables and function definition
+# summary table of truth (for later comparison)
+tbl_truth <- tibble(
+  method = "Truth (All sample sizes = " %&% n %&% ")", 
+  lambda = lambda_mean, 
+  std.error = lambda_sd/sqrt(n),
+  lower_0.95 = lambda_mean + qt(0.05/2, n-1)*std.error,
+  upper_0.95 = lambda_mean + qt(1 - 0.05/2, n-1)*std.error,
+  width = upper_0.95 - lower_0.95)
+
+# save session image
+save.image(here("data", "sim_decay.RData"))
+```
+

@@ -1,0 +1,120 @@
+{{< pagebreak >}}
+## Bootstrapping CI
+
+Bootstrapping is a very powerful method to sample estimates by using random sampling with replacement. The central idea is assuming the bootstrap statistics vary in a similar fashion to the sample statistic of interest. 
+**Resample** of the sample of same sample size with replacement. Bootstrap has two major uses [@Wood2009]:
+1. Approximating the shape of a sampling distribution (to form a CI)
+2. Estimating the spread of an estimator
+
+$$
+\begin{aligned}
+\hat{SE}(\hat{\underset{\sim}{\alpha}})
+&=\sqrt{\frac{1}{B}\sum_{i=1}^B\left(\hat{\alpha}_j^*-\bar{\hat{\alpha}^*}\right)^2} \\
+&=\sqrt{
+\begin{array}{c}
+\text{Biased sample variance}\\
+\text{of bootstrapped estimates}
+\end{array}
+}
+\end{aligned}
+$${#eq-bootci} 
+
+The assumption of bootstrapping is that variation between each resample (bootstrap sample) gives a good idea of sampling error when sampling a real population. Although the resample is not the real population, it is reasonably similar to sampling from the population under this assumption and thus provides a good estimate or test measure of interest. This is the main reason we choose this method in this study.
+
+In general, the workflow of bootstrap confidence intervals is:
+
+1. resample $B$ stacks of bootstrap samples (same sample size $n$ with replacement)
+    - this can be done from observations (non-parametric) or from a known distribution (parametric)
+2. calculate $B$ (plug-in) bootstrap estimates of the sample statistic
+3. assume these bootstrap statistics vary in a similar fashion to your sample statistic
+	  - to approximate shape of the distribution $\text{CI}$
+	  - to obtained spread of the estimator $\hat{\text{SE}}(\hat{\underset{\sim}{\alpha}})$
+
+For each bootstrap sample, we can obtain the parameter estimate using parametric method or non-parametric method.
+
+### Parametric Bootstrap CI
+
+Based on the physical model, we can estimate the parameter $\hat{\lambda} = -\frac{1}{x}\ln y$ (@eq-lambda)  using each bootstrap sample and calculate its average (@eq-lambda-avg):
+
+1. Resample data with the same sample size $n$
+2. For each resample observation, compute the parameter estimate from $(x, y)$
+3. Compute the average estimate
+4. Repeat for $N$ times
+
+### Non-Parametric Bootstrap CI
+
+For the non-parametric approach, we use the bootstrap sample to refit a nonlinear regression model and obtain the NLR estimate for the parameter.
+
+1. Resample data with the same sample size $n$
+2. For each resample data set, fit a nonlinear regression model
+3. Obtain NLR estimate
+4. Repeat for $N$ times
+
+### Bootstrap CI Results
+
+We then use the distribution of the bootstrap statistics obtained above to approximate the shape of the distribution CI. Furthermore, for computational efficiency, we combine these two into one loop:
+
+```{r}
+# number of bootstrapping samples
+N <- 0.1*1000
+
+# bootstrap for N times
+boot <- 1:N %>% 
+  sapply(\(x){
+    # resample: index of rows
+    idx <- sample(1:n, n, replace = T)
+    # resample data
+    df_boot <- df[idx, ] %>% 
+      # bootstrap A: calculate the lambda for each resampled observation
+      mutate(estimate = fmod_inv(y, x))
+  
+    # bootstrap B: fit nlr model for each resampled data set
+    mod_boot <- nls(y ~ fmod(x, lambda), df_boot, start = c(lambda = lambda_mean))
+  
+    # return the estimates
+    c(A = mean(df_boot$estimate), B = tidy(mod_boot)$estimate)
+  }) %>%
+  # transpose and convert into a data frame
+  t() %>% 
+  as_tibble()
+```
+
+```{r}
+# histogram and CI
+
+# save and restore option
+op <- par(pty="m", mfrow=c(2, 1), mar=c(4.2, 4.2, 1, 1))
+
+hist(boot$A, main = "Parametric Bootstrap", xlab = "lambda")
+abline(v = quantile(boot$A,  probs = c(0.05/2, 1-0.05/2)))
+hist(boot$B, main = "Non-parametric Bootstrap", xlab = "lambda")
+abline(v = quantile(boot$B,  probs = c(0.05/2, 1-0.05/2)))
+
+# restore option
+par(op)
+```
+
+```{r}
+# save as a comparison table
+tbl_bootA <- tibble(
+  method = "Parametric Bootstrap", 
+  lambda = mean(boot$A), 
+  std.error = NA,
+  lower_0.95 = quantile(boot$A,  probs = 0.05/2),
+  upper_0.95 = quantile(boot$A,  probs = 1 - 0.05/2),
+  width = upper_0.95 - lower_0.95)
+
+tbl_bootB <- tibble(
+  method = "Non-parametric Bootstrap", 
+  lambda = mean(boot$B), 
+  std.error = NA,
+  lower_0.95 = quantile(boot$B,  probs = 0.05/2),
+  upper_0.95 = quantile(boot$B,  probs = 1 - 0.05/2),
+  width = upper_0.95 - lower_0.95)
+
+bind_rows(tbl_bootA, tbl_bootB)
+```
+
+
+
+

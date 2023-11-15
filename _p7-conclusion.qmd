@@ -1,0 +1,32 @@
+{{< pagebreak >}}
+## Conclusion
+
+In this study, we introduce the algorithm developed by Prof. Hayes to estimate the standard deviation of a model parameter by fitting a Gaussian curve. After implementing the algorithm, we perform a extensive study on a simulated data set to test how well the algorithm performs in the estimating the parameter's standard deviation. In this study, we have shown that the obtained fitting results are not stable and greatly depend on the initial fitting values of the parameters. Among them, the parameters associating with the fitting range (the location `range_lb` and the width `range`) have the biggest impacts on the fitting results.
+
+```{r}
+# compare all centered cases
+p4_centered %>% 
+  mutate(method = "PSCF - Centered", std.error = sd/sqrt(n)) %>% 
+  rename(lambda = mean, fitting_initial_setup = title) %>% 
+  select(method, fitting_initial_setup, lambda, std.error)
+```
+
+```{r}
+tibble(
+  method = c("PSCF - Centered", " "),
+  " " = c("max", "min"),
+  lambda = c(max(p4_centered$mean), min(p4_centered$mean)),
+  std.error = c(max(p4_centered$sd), min(p4_centered$sd))/sqrt(n)
+)
+```
+
+
+
+Even if we force the fitting range to be centered around the best fitted value, the range of the fitted standard deviation `sd` is still very wide. This is because the objective function we use to minimize in **the algorithm doesn't have a global minimum**. 
+
+While we cannot get a reliable estimation on the parameter's standard deviation using the proposed algorithm, we can still take advantages of the statistical methods like non-linear regression, bootstrapping CI and Delta method normality. These methods are well developed and have been used in many applications. In this study, we have showed that these methods are capable to obtain pretty good estimation on the model parameter.
+
+```{r}
+# comparison - using statistical methods
+rbind(tbl_nlr, tbl_bootA, tbl_bootB, tbl_delta1, tbl_truth)
+```

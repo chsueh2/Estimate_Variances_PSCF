@@ -1,0 +1,566 @@
+{{< pagebreak >}}
+## Perturbed SSE Curve Fitting (PSCF) Method
+
+This proposed method fits a Gaussian curve on the sum square of errors (SSE) as a function of the model parameter $\lambda$. Since the estimate is obtained by minimizing SSE, the SSR curve is a convex curve with the minimum at $\hat{\lambda}$. To further investigate this visually, we first define functions to compute the SSE as a function of the mode parameter.
+
+```{r}
+# compute SSE (a vectorized function)
+SSE <- function(lambda, df, fmod){
+  Vectorize(\(lambda){sum((df$y-fmod(df$x, lambda))^2)})(lambda)
+}
+
+# compute range ("reflection points")
+get_range <- function(h, df, fmod, bestfit){
+  # upper and lower bound
+  lb <- NA
+  try(
+    lb <- uniroot(
+    \(x){h - SSE(x, df, fmod)},
+    c(bestfit$lambda, bestfit$lambda - 3*bestfit$sd),
+    extendInt = "yes")$root
+  )
+  if(is.na(lb)) lb <- bestfit$lambda - 3*bestfit$sd
+  
+  ub <- NA
+  try(
+    ub <- uniroot(
+      \(x){h - SSE(x, df, fmod)},
+      c(bestfit$lambda, bestfit$lambda + 3*bestfit$sd),
+      extendInt = "yes")$root
+  )
+  if(is.na(lb)) ub <- bestfit$lambda + 3*bestfit$sd
+  
+  # standardized upper and lower bound
+  c(lb_std, ub_std) %<-% (c(lb, ub) - bestfit$lambda)/bestfit$sd
+  
+  list(
+    ub = ub, lb = lb, range = ub - lb,
+    ub_std = ub_std, lb_std = lb_std, range_std = ub_std - lb_std)
+}
+```
+
+To flip the convex curve: $h - SSE(\lambda)$ with some constant $h$:
+
+```{r}
+# define plotting parameters
+h_values <- c(0.5, 1, 1.5)
+from_to <- lambda_mean + c(-1.5, 3)*lambda_sd
+color <- c("red", "blue", "green")
+
+# save and restore option
+op <- par(pty="m", mfrow=c(1, 2), mar=c(4.2, 4.2, 1, 1))
+
+# plot SSE vs. lambda
+curve(SSE(x, df, fmod), 
+      from = from_to[1], to = from_to[2],
+      xlab = bquote(lambda), ylab = bquote(SSE(lambda)))
+abline(v = tidy(mod_fit)$estimate)
+text(2, 2.2, "estimated lambda = " %&% round(bestfit$lambda, 5), pos = 4)
+text(2, 2, "estimated std error = " %&% round(bestfit$se, 5), pos = 4)
+text(2, 1.8, "SSE = " %&% round(bestfit$sse, 5), pos = 4)
+abline(h = h_values, lty = 2, col = color)
+
+# plot inverse SSE vs. lambda
+walk(3:1, \(h){
+  curve(h_values[h] - SSE(x, df, fmod), 
+        add = (h!=3), col = color[h], lty = 2,
+        from = from_to[1], to = from_to[2],
+        xlab = bquote(lambda), ylab = "h - SSE(lambda)")
+  text(3, h_values[h] - 0.5, bquote(.(h_values[h]) - SSE(lambda)))
+})
+
+# restore option
+par(op)
+```
+
+As seen above, the choice of $h$ can be arbitrary. In the following attempts, we will use these three values to flip the curve and perform curve fitting as proposed.
+
+```{r}
+# define plotting parameters
+from_to <- lambda_mean + c(-3, 3)*lambda_sd
+
+# plot SSE vs. lambda
+curve(SSE(x, df, fmod), 
+      from = from_to[1], to = from_to[2],
+      xlab = bquote(lambda), ylab = bquote(SSE(lambda)))
+```
+
+This means we need to know:
+
+1. How to flip the SSE curve is an arbitrary choice, ie. what value of $h$ should be used?
+2. What is the range of $\lambda$ should be included in the fitting? 
+3. The inverse SSE curve is skewed and is not bell shaped. Is Gaussian curve a good candidate for the fitting?
+
+### Curve Flipping and Range Selection
+
+We first address the first two by parameterizing the objective function for $SSE(\lambda)$ minimization as $h-SSE(\lambda)$ so that we can fit a Gaussian curve:
+
+$$
+\widehat{SSE}(\lambda=x) \simeq h- a\cdot e^{\frac{-1}{2\sigma^2}(x-\mu)^2}
+$${#eq-PSCF} 
+
+where $h>0$ and $a>0$.
+
+By doing so, we include two parameters $h$ to control how to flip the curve and $a$ to control the scaling width. However we need to address that the width of a Gaussian curve is then determined by this scaling factor $a$ and the standard deviation $\sigma$. We will need to expect how the fitting works and decide our fitting strategy.
+
+In Prof. Hayes' algorithm, if the initial fitting range is not specified, the reflection points calculated by solving $h-SSE(\lambda)=0$ will be used.
+
+Next, we define a helper function to compute $\widehat{SSE}(\lambda)$ based on a given fitting function `fn()`. In the case of Gaussian fitting, the R base function `dnorm()` is used.
+
+```{r}
+# define a function to compute SSE fitted by the specified curve
+SSE_hat <- function(lambdas, h, a, fn, ...){
+  sse_fit  <-  abs(h) - abs(a)*fn(lambdas, ...)
+  return(sse_fit)
+}
+```
+
+Finally, we define couple more helper functions to carry on the curve fitting to optimize a specified objective function in order to minimize the residual sum squares:
+
+$$
+\arg\min_{h,a,\mu, \sigma} \sum_{\lambda_i} \left(\widehat{SSE}(\lambda_i) - SSE(\lambda_i)\right)^2
+$${#eq-PSCF2} 
+
+These helper functions are:
+
+- `fit_optim()`: perform optimization to minimize the objective function using a Gaussian curve.
+- `fit_summarize()`: summarize the results.
+- `fit_plot()`: plot $\widehat{SSE}(\lambda)$ and $SSE(\lambda)$ for comparison and visually verify the goodness of the fitting (optimization).
+
+```{r}
+# minimize sse(lambda) and plot sse for comparison using Gaussian fit
+## pars = {h, a, mean, sd, range_lb, range, n}
+fit_optim <- function(pars, pars_control, df, fmod, bestfit){
+  
+  update_range <- function(pars){
+    # add range_lb and range if either is missing in pars
+    # use "reflection points" as endpoints of fitting range 
+    #print(paste(pars[c("h", "range_lb")]))
+    if(is.na(pars$range_lb) | is.na(pars$range)){
+      range_by_h <- get_range(pars$h, df, fmod, bestfit)
+      if(is.na(pars$range_lb)) pars$range_lb <- range_by_h$lb
+      if(is.na(pars$range)) pars$range <- range_by_h$range_std
+    }
+    #print(paste(pars[c("h", "range_lb")]))
+    pars
+  } 
+  
+  # update parameters
+  update_pars <- function(b, pars){
+    pars_new <- c(b, pars[setdiff(names(pars), names(b))])[names(pars)]
+    #print(pars_new[c("h", "range_lb")] %>% paste())
+    pars_new <- update_range(pars_new)
+    #print(pars_new[c("h", "range_lb")] %>% paste())
+    
+    return(pars_new)
+  }
+  
+  # compute sse_data and sse_fit for residuals
+  sse <- function(pars2){
+    # determine lower and upper bound of lambda
+    lb <- bestfit$lambda - abs(pars2$range_lb)*bestfit$sd
+    ub <- lb + abs(pars2$range)*bestfit$sd
+    # set up grid for lambda
+    lambda <- seq(lb, ub, length.out = pars2$n)
+    # compute sse_data and sse_fit
+    sse_data <- SSE(lambda, df, fmod)
+    sse_fit <- SSE_hat(lambda, pars2$h, pars2$a, dnorm, pars2$mean, pars2$sd)
+    # pack into a data frame and return
+    return(tibble(lambda = lambda, sse_data = sse_data, sse_fit = sse_fit))
+  }
+  
+  # objective function: residual sum squares
+  fn_obj <- function(b){
+    # update parameters
+    pars2 <- update_pars(b, pars)
+
+    # compute residuals
+    df2 <- sse(pars2)
+    residuals <- df2$sse_fit - df2$sse_data
+    # return residual sum squares
+    return(sum(residuals^2))
+  }
+  
+  pars <- update_range(pars)
+  
+  # optimize with minimization of residual sum squares
+  fit <- optim(par = pars[pars_control], fn = fn_obj)
+  
+  # retrieve parameters
+  pars2 <- update_pars(fit$par, pars) %>% lapply(abs)
+  
+  # compute sse_data and sse_fit
+  df2 <- sse(pars2)
+  rss <- sum((df2$sse_fit - df2$sse_data)^2)
+  width <- max(df2$lambda) - min(df2$lambda)
+  pars2 <- c(rss = rss, width = width, pars2) %>% 
+    lapply(signif, digits = 4)
+  # alert if minimized values don't match
+  if(fit$value != rss){
+    print(glue("Not matched! {fit$value} vs. {rss}"))
+  }
+  
+  return(list(fit = fit, pars = pars2, df_sse = df2))
+}
+
+# summarize fit results
+fit_summarize <- function(fits, title = "", plot = F, print = F){
+  fit <- fits$fit
+  pars <- fits$pars
+  df_sse <- fits$df_sse
+  
+  tbl_par <- as_tibble(pars) %>% 
+    mutate(title = title) %>% 
+    relocate(title, rss, width, h, a, mean, sd)
+  if(print) print(tbl_par)
+  
+  # plot for comparison
+  p <- fit_plot(df_sse, pars, title)
+  if(plot) print(p)
+    
+  # return summary table
+  tbl <- tibble(
+    method = title,
+    lambda = pars$mean,
+    std.error =  pars$sd/sqrt(nrow(df)),
+    lower_0.95 = lambda_mean + qnorm(0.05/2)*std.error,
+    upper_0.95 = lambda_mean + qnorm(1 - 0.05/2)*std.error,
+    width = upper_0.95 - lower_0.95)
+  
+  return(list(pars = tbl_par, tbl = tbl, p = p))
+}
+
+# plot for fit comparison
+fit_plot <- function(df_sse, pars, title){
+  # fewer digits for easier reading
+  pars <- lapply(pars, round, digits = 3)
+  
+  # plot comparison;'
+  df_sse %>%
+    pivot_longer(cols = starts_with("sse"), names_to = "Type") %>% 
+    ggplot(aes(lambda, value, col = Type)) +
+    geom_line() +
+    labs(
+      x = bquote(lambda),
+      y = bquote(SSE(lambda)),
+      title = glue(
+        "{title}\n",
+        "rss = {pars$rss}, width = {pars$width}"),
+      subtitle = glue(
+        "(mean, sd) = ({pars$mean}, {pars$sd})\n",
+        "(h, a) = ({pars$h}, {pars$a})"))
+}  
+```
+
+In `fit_optim()`, we include the following fitting parameters and their initial values in a vector `pars`:
+
+- `h` and `a`: Control how to flip the SSE curve and its scaling width. Both the initial values are set to 1.
+- `mean`, `sd`: Control location and shape of the Gaussian curve. The mean and standard deviation obtained in the best fitting (non-linear regression) are used as initial values. 
+- `range_lb`: Controls range of $\lambda$, lower bound of the fitting range (unit: `sd`). The initial lower bound is set to the 2 standard deviation lower than the initial mean.
+- `range`: Controls range of $\lambda$, numbers of `sd` to be included in the fitting (unit: `sd`). The initial range to be included is at least 4 standard deviations.
+- `n`: Controls how many grid points in the fitting range $\lambda$.
+
+If either of `range_lb` and `range` is given, we use the "reflection points" as endpoints of the fitting range. This is defined by solving $h-SSE(\lambda)=0$.
+
+Also, a parameter control vector `pars_control` is used to specify which parameters are varied to minimize the objective function. For example, `c(1, 2, 3, 4)` means we only vary `h`, `a`, `mean` and `sd` (the 1st, 2nd, 3rd and 4th parameters listed above) to optimize the fitting.
+
+### Fitting Strategy I: Fit Without Specifying Initial Fitting Range
+
+In our first attempt, we fit $SSE(\lambda)$ without explicitly specifying initial fitting range. the "reflection points" will be used to bound the fitting range based on the value of $h$:
+
+- Control (case 1): fit all parameters
+- Group 1 (case 2-3): fixed `h` or `a` - how to flip the SSE curve
+- Group 2 (case 4-5): fixed `mean` or `sd` - shape of the Gaussian curve
+- Group 3 (case 6-8): fixed `range_lb` and/or `range` - fitting range
+
+```{r}
+# initial parameters and control which to fit
+pars <- list(
+  h = 1, a = 1, mean = bestfit$lambda, sd = bestfit$sd, 
+  range_lb = NA, range = NA, n = 100)
+
+# optimization fit: fit all parameters
+opt1 <- c(1, 2, 3, 4, 5, 6) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "fit all")
+# optimization fit: fit all parameters except h
+opt2 <- c(2, 3, 4, 5, 6) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except h")
+# optimization fit: fit all parameters except a
+opt3 <- c(1, 3, 4, 5, 6) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except a")
+# optimization fit: fit all parameters except mean
+opt4 <- c(1, 2, 4, 5, 6) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except mean")
+# optimization fit: fit all parameters except sd
+opt5 <- c(1, 2, 3, 5, 6) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except sd")
+# optimization fit: fit all parameters except range_lb
+opt6 <- c(1, 2, 3, 4, 6) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except range_lb")
+# optimization fit: fit all parameters except range
+opt7 <- c(1, 2, 3, 4, 5) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except range")
+# optimization fit: fit all parameters with fixed interval
+opt8 <- c(1, 2, 3, 4) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "fixed range")
+
+# compare visually
+ggarrange(
+  opt1$p, opt2$p, opt3$p, opt4$p, opt5$p, opt6$p, opt7$p, opt8$p,
+  ncol = 4, common.legend = TRUE, legend = "bottom")
+
+# summarize in a table
+bind_rows(
+  opt1$pars, opt2$pars, opt3$pars, opt4$pars, 
+  opt5$pars, opt6$pars, opt7$pars, opt8$pars) %>% rowid_to_column()
+
+bind_rows(
+  opt1$tbl, opt2$tbl, opt3$tbl, opt4$tbl, 
+  opt5$tbl, opt6$tbl, opt7$tbl, opt8$tbl) %>% rowid_to_column()
+```
+
+#### Control (case 1): fit all parameters 
+
+Not surprisingly, the case 1 has the smallest fitting error (`rss`) because of all the parameters are free to change. But this is not a good fitting because if only fit one side of the curve to get the smallest `rss`. 
+
+#### Group 1 (case 2-3): fixed `h` or `a` - how to flip the SSE curve
+
+Similarly to what happened previously, if we fit everything but `h` or `a`, the minimization of `rss` leads to fitting on one side of the curve.
+
+#### Group 2 (case 4-5): fixed `mean` or `sd` - shape of the Gaussian curve
+
+By fix either `mean` or `sd`, we fix the location and shape of the Gaussian curve. Fixing `mean` leads to a very narrow fitting range (plot 4). Fixing `sd` gives a off-center fitting range (plot5).
+
+#### Group 3 (case 6-8): fixed `range_lb` and/or `range` - fitting range
+
+The lower bound of the reflection points is very far away from the mean. Therefore, in case 6 and 8, the lower bound of the fitting range (`range_lb`) is fixed and this leads to the fitting curve with a large fitting range and large `rss`. On the other hand if we only fix the width of the fitting raneg (`range`), we get a pretty good fit (plot 7) although it's off-center similarly to case 5. 
+
+Based on the results above, in order to get a good fitting, we need to force the fitting range centered and force it to include a wider range. These can be done by fixing `range_lb` and `range` parameters. If we let them be free, the fitting results will be either off-centered or using a very narrow fitting range. 
+
+### Fitting Strategy II: Fit With Specifying Initial Fitting Range
+
+Based on the learning from the previous section, we should control the fitting range. In this study, we will control it with the initial values of the range (the location `range_lb` and the width `range`):
+
+- Group 1 (case 1-4): the initial fitting range is set to be 1.5 standard deviations of the best fitting
+- Group 2 (case 5-8): the initial fitting range is set to be 1.5 standard deviations of the best fitting
+
+In both groups, the fitting range is centered initially and we try to keep one parameter free at a time in the first three cases (case 1-3 in group 1 and case 5-7 in group 2). In the last set (case 4 and 8) of each group, we will keep both the fitting ranges fixed to the initial values.
+
+```{r}
+# initial parameters and control which to fit
+pars <- list(
+  h = 1, a = 1, mean = bestfit$lambda, sd = bestfit$sd, 
+  range_lb = -0.75, range = 1.5, n = 100)
+# optimization fit: fit all parameters except sd
+opt1 <- c(1, 2, 3, 5, 6) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except sd")
+# optimization fit: fit all parameters except range_lb
+opt2 <- c(1, 2, 3, 4, 6) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except range_lb")
+# optimization fit: fit all parameters except range
+opt3 <- c(1, 2, 3, 4, 5) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except range")
+# optimization fit: fit all parameters with fixed interval
+opt4 <- c(1, 2, 3, 4) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "fixed range")
+
+# initial parameters and control which to fit
+pars <- list(
+  h = 1, a = 1, mean = bestfit$lambda, sd = bestfit$sd, 
+  range_lb = -1, range = 3, n = 100)
+# optimization fit: fit all parameters except sd
+opt5 <- c(1, 2, 3, 5, 6) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except sd")
+# optimization fit: fit all parameters except range_lb
+opt6 <- c(1, 2, 3, 4, 6) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except range_lb")
+# optimization fit: fit all parameters except range
+opt7 <- c(1, 2, 3, 4, 5) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "except range")
+# optimization fit: fit all parameters with fixed interval
+opt8 <- c(1, 2, 3, 4) %>% 
+  fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+  fit_summarize(title = "fixed range")
+
+# compare visually
+ggarrange(
+  opt1$p, opt2$p, opt3$p, opt4$p, opt5$p, opt6$p, opt7$p, opt8$p,
+  ncol = 4, common.legend = TRUE, legend = "bottom")
+
+# summarize in a table
+bind_rows(
+  opt1$pars, opt2$pars, opt3$pars, opt4$pars, 
+  opt5$pars, opt6$pars, opt7$pars, opt8$pars) %>% rowid_to_column()
+
+bind_rows(
+  opt1$tbl, opt2$tbl, opt3$tbl, opt4$tbl, 
+  opt5$tbl, opt6$tbl, opt7$tbl, opt8$tbl) %>% rowid_to_column()
+```
+
+It is not surprising that the smallest RSS is obtained when we have more fitting parameter free to change. The trade off again (as seen in the previous section), the fitting range is very narrow and might become off centered.  The obtained standard deviations (`sd`) have very wide range too. Based on the comparison plots, to ensure we use have a centered reasonable range, we need to keep the two parameters `range_lb` and `range` fixed. This means we cannot let the algorithm to determine the fitting range. 
+
+```{r}
+# try centered cases with various fitting range 
+ranges_lst <- c(1, 1.5, 2, 2.5, 3, 3.5)
+plot_lst <- list()
+for(i in seq_along(ranges_lst)){
+  range_i <- ranges_lst[[i]]
+  
+  # set up parameter
+  pars <- list(
+    h = 1, a = 1, mean = bestfit$lambda, sd = bestfit$sd, 
+    range_lb = -(range_i/2), range = range_i, n = 100)
+  # optimization fit: fit all parameters with fixed interval
+  opt <- c(1, 2, 3, 4) %>% 
+    fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+    fit_summarize(title = "fixed range")  
+  
+  plot_lst <- append(plot_lst, list(opt$p))
+}
+
+# plot comparison
+ggarrange(
+  plot_lst[[1]], plot_lst[[2]], plot_lst[[3]],
+  plot_lst[[4]], plot_lst[[5]], plot_lst[[6]],
+  ncol = 3, nrow = 2, common.legend = TRUE, legend = "bottom")
+```
+
+### Fitting Strategy III: Grid Search
+
+If we need to specify the fitting range, the remaining question is how the fitted standard deviation changes with the specified fitting range. To understand this, a grid search of `range_lb` and `range` has been performed:
+
+```{r}
+#| cache: true
+
+# a helper function to do the fitting used in a grid search setup
+search_optim <- function(pars, range_lb.init, range.init){
+  # initial parameters and control which to fit
+  pars$range_lb = range_lb.init
+  pars$range = range.init
+
+  # optimization fit: fit all parameters except sd
+  opt <- c(1, 2, 3, 4) %>% 
+    fit_optim(pars, pars_control = ., df, fmod, bestfit) %>% 
+    fit_summarize(
+      title = glue(
+        "init. (h, a, lb, range)= ",
+        "({pars$h}, {pars$a}, {pars$range_lb}, {pars$range})"))
+}
+
+# initial parameters and control which to fit
+pars <- list(
+  h = 1, a = 1, mean = bestfit$lambda, sd = bestfit$sd, 
+  range_lb = NA, range = NA, n = 100)
+
+# grid search
+df_pscf <- expand_grid(range_lb.init = seq.int(-20, -5, 1)/10, range.init = seq.int(10, 40, 2)/10) %>% 
+  filter(range.init >= 2*abs(range_lb.init)) %>% 
+  rowwise() %>% 
+  mutate(opt = list(search_optim(pars, range_lb.init, range.init)))
+
+# summary table
+p4_summary <- df_pscf %>% 
+  hoist(opt, pars = 1, tbl = 2, plot = 3) %>% 
+  unnest(pars) 
+p4_summary %>% select(1:2, rss:sd)
+```
+
+```{r}
+df_grid <- p4_summary %>% 
+  select(range_lb.init, range.init) %>% 
+  arrange(range.init) %>% 
+  group_by(range.init) %>% 
+  mutate(
+    xmin = range_lb.init,
+    xmax = - range_lb.init,
+    count = row_number(),
+    y = 4*range.init + (count-1)*0.1,
+    text = "width = " %&% range.init %&% "x"
+  )
+
+df_grid %>% 
+  ggplot(aes(xmin = xmin, xmax = xmin + range.init, y = y)) +
+  geom_errorbarh(aes(col = factor(count))) +
+  geom_label(
+    #aes(xmin + range.init + 0.5, y = y, label = text), 
+    aes(2.5, y = y, label = text), 
+    filter(df_grid, count == 1),
+    hjust = 0) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()) +
+  geom_vline(xintercept = 0) +
+  annotate("text", x = 0.05, y = 18, label = "bets-fitted lambda", hjust = 0) + 
+  labs(x = "Fitting Range (Related to Best-Fitted Lambda)", y = "")
+```
+
+The summary table is huge and hard to read. It is easier to plot $SSE(\lambda)$ as a function of the fitting range:  `range_lb` as for its location in the horizontal axis and `range` as for its width in different color:
+
+```{r}
+# plot the overall comparison
+p4_summary %>% 
+  ggplot(aes(abs(range_lb.init), rss, col = fct_rev(factor(range.init)))) +
+  geom_line() +
+  geom_point() +
+  labs(
+    x = "Fitting Lower Bound [# of sd]",
+    y = "SSE(lambda)",
+    color = "Fitting Range [# of sd]"
+  )
+```
+
+As seen in the plot, the minimization of $SSE(\lambda)$ will leads the fitting algorithm to use very narrow fitting range. When we force it to use a large fitting range, the $SSE(\lambda)$ becomes bigger. This clearly explains why this algorithm could not give us a stable fitted standard deviation `sd` - there is no global minimum.
+
+```{r}
+# focus on the centered cases
+p4_centered <- p4_summary %>% filter(range.init == 2*abs(range_lb.init)) 
+p4_centered %>% select(1:2, title, rss:sd)
+
+# plot the centered case
+ggarrange(
+  plotlist = p4_centered$plot, 
+  ncol = 4, common.legend = TRUE, legend = "bottom")
+```
+
+```{r}
+# summary plot for the centered cases
+p4_centered %>% ggplot(aes(range.init, sd)) + 
+  geom_line() + 
+  geom_point() +
+  labs(
+    x = "Fitting Range [unit: # of bestfit standard devation]",
+    y = "Fitted Standardard Deviation",
+    title = "Fitted sd from the centered cases"
+  )
+```
+
+The algorithm can give a very wide estimated (fitted) standard deviation depending on the initial values of the fitting range (location `range_lb` and width `range`). Even for the cases with forced centered ranges, the obtained fitting results are not stable.
+
+
+
+
+
+
+
+
+
+
+
+

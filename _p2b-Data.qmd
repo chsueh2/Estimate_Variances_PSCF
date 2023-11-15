@@ -1,0 +1,49 @@
+{{< pagebreak >}}
+## Attenuation Decay
+
+In this work, we will use a simulated data set (details given later) to study a physical model "attenuation decay".
+
+### Physical Model
+::: {.callout-note icon=false}
+### Physical Model: Radiation strength measured at distance $x$
+
+$$y = e^{-\lambda x}$$ 
+
+- Response variable: $y=$ radiation strength
+- Explanatory variable (numeric): $x=$ distance
+- Parameter of interest: $\lambda =$ attenuation coefficient.
+- Estimator: $\hat{\lambda} = -\frac{1}{x}\ln y$
+
+Goal: Estimate the parameter $\lambda$ and its standard error
+:::
+
+We treat the parameter $\lambda$ as a random variable and follows a normal distribution. By central limit theorem (CLT), the sample mean of a random sample with sample size $n$ is also distributed normally:
+
+$$
+\begin{aligned}
+\lambda_i &\overset{iid}{\sim} N(\mu, \sigma^2) \\
+\Rightarrow
+\bar{\lambda} &= \frac{1}{n} \sum_{i=1}^n \lambda_i \sim N(\mu, \sigma^2/n)
+\end{aligned}
+$$
+
+### Data
+
+Load the data set:
+
+```{r}
+# load session image
+load(here("data", "sim_decay.RData"))
+```
+
+The data set contains `r n` observations of the radiation strength and measurement distance:
+
+```{r}
+# exam data set
+df %>% select(y, x)
+
+# scatter plot between measured strength y and distance x
+plot(df$x, df$y, xlab = "x (distance)", ylab = "y (measured radiation strength)")
+```
+
+It's clearly to see the decay trend described in the physical model (the decay equation) and the randomness due to the uncertainty of the model parameter.

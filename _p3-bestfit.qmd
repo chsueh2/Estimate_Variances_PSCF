@@ -1,0 +1,71 @@
+{{< pagebreak >}}
+## Best Fit Model using Nonlinear Regression Model
+
+To estimate the model parameter, the best fitted value of the model parameter is determined by minimizing the the residual sum-of-squares (sum squares of errors, SSE). The least squares estimation for the parameter is therefore determined by:
+
+$$
+\begin{aligned}
+\hat{\theta} = \arg\min_{\theta} \sum_{i=1}^n \left[y_i-f(x_i,\hat{\theta})\right]^2
+\end{aligned}
+$${#eq-nlrols} 
+
+where $f:\mathbb{R}^n\times \mathbb{R} \to \mathbb{R}$ is an unknown function with the independent variables $x_i$ for $i=1,\ldots,n$ and the unknown parameter $\hat{\theta}$. We are assuming the randomness of the measurement data $y_i$ are independent and identically distributed (i.i.d.) and can be estimated by:
+
+$$
+\begin{aligned}
+y_i = f(x_i,\theta) &+ \epsilon_i \quad i=1,2,\ldots,n\\ \\
+E[\epsilon_i] &= 0\\
+Cov(\epsilon_i, \epsilon_j) &= \delta_{ij}\sigma^2 \quad \forall i,j
+\end{aligned}
+$${#eq-nlriid} 
+
+There are many possible way to perform the east squares estimation and obtain the parameter estimate numerically. In Prof. Hayes's research, an industrial standard method, Monte Carlo N-particle (MCNP), is used. 
+
+For this work, since we use nonlinear regression instead to achieve the same minimization of SSE. There are two major reasons we choose this method. First, using nonlinear regression model doesn't rely on the some strong assumptions including normality and linearity. With sufficiently large sample size, we can use nonlinear function $f$ and its asymptotic normality of the least squares estimate [@seber1989] to estimate the parameter:
+
+$$
+\begin{aligned}
+\hat{\theta} &\dot\sim N\Bigg(\theta, Var\left(\left[\mathbf{F}(\theta)'\cdot \mathbf{F}(\theta)\right]^{-1}\right)\Bigg) \\
+Var(y_i - f(x_i,\theta)) &\approx Var(y_i) + Var\big(f(x_i,\theta)\big) \\
+&\approx \sigma^2 +\sigma^2
+\nabla f(x_i,\theta)' \left[\mathbf{F}(\theta)'\cdot \mathbf{F}(\theta)\right]^{-1} \nabla f(x_i,\theta)
+\end{aligned}
+$${#eq-nlr} 
+
+The second reason is the computational algorithm of this method is well developed and the base R provides `nsl()`:
+
+```{r}
+# fit nlr model
+mod_fit <- nls(y ~ fmod(x, lambda), df, start = c(lambda = lambda_mean))
+mod_fit
+
+# save fit result
+bestfit <- list(
+  lambda = tidy(mod_fit)$estimate,
+  se = tidy(mod_fit)$std.error,
+  sd = tidy(mod_fit)$std.error*sqrt(n),
+  sse = glance(mod_fit)$deviance)
+
+# overlay plot with fitted values
+plot(df$x, df$y, xlab = "x (measurement distance)", ylab = "y (measured radiation strength)")
+lines(x = df$x, 
+      y = predict(mod_fit, tibble(x = df$x, lambda = bestfit$lambda)),
+     type="l")
+text(1, 0.6, "estimated lambda = " %&% round(bestfit$lambda, 5), pos = 4)
+text(1, 0.5, "estimated std error = " %&% round(bestfit$se, 5), pos = 4)
+text(1, 0.4, "SSE = " %&% round(bestfit$sse, 5), pos = 4)
+```
+
+```{r}
+# save as a comparison table
+tbl_nlr <- tibble(
+  method = "Nonlinear Regression", 
+  lambda = bestfit$lambda, 
+  std.error = bestfit$se,
+  lower_0.95 = lambda_mean + qt(0.05/2, n-1)*std.error,
+  upper_0.95 = lambda_mean + qt(1 - 0.05/2, n-1)*std.error,
+  width = upper_0.95 - lower_0.95)
+tbl_nlr
+```
+
+Note that the residual sum-of-squares is `r glance(mod_fit)$deviance`.

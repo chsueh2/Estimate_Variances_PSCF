@@ -1,0 +1,58 @@
+{{< pagebreak >}}
+:::{.center}
+## Estimate Variances of Model Parameters Using Perturbed SSE Curve Fitting (PSCF) Method
+
+Client: Prof. Robert Hayes (Department of Nuclear Engineering, NCSU)
+
+Team: Chien-Lan Hsueh (Department of Statistics, NCSU) 
+:::
+
+## Introduction
+
+A new algorithm has been developed by Prof. Hayes in order to estimate variances of a model parameter based on perturbation of the best fitted parameter. This algorithm has been claimed to give a good assessment of the standard error of the model parameter. The obtained results have been published in several research articles.
+
+This work is to reproduce the algorithm and compare it with the other common statistics methods including nonlinear regression models, bootstrap confidence intervals and the delta normality method.
+
+
+### Background
+Prof. Hayes' is an active faculty in the department of nuclear engineering at NCSU. His research of retrospective dosimetry [@omara2018] involves developing a new method to measure radiation dosages and analyze them to infer the actual radiation exposures. Although the traditional technique, which is a direct radiation measurement on the subjects, can provide an accurate depth profile measurement, it is costly and time consuming. Using the new method he developed [@osti_1614540], he can use forensic luminescence data that is high correlated to the actual radiation dosage and an industry standard Monte Carlo n-particle method (MCNP) [@osti_977428] to fit the dose deposition profile and estimate the physical model parameter. Furthermore, with the obtained best fitted model parameter as a reference, a series of "perturbed" model fittings is then used in a normal curve fitting to estimate the variance of the parameter. A detailed description of this algorithm can be found in Dr. O'Mara's Ph.D. dissertation [@o2020retrospective].
+
+### Perturbed SSE Curve Fitting (PSCF) Method
+
+For convenience, we call this algorithm Perturbed SSE Curve Fitting (PSCF) method in this work.
+
+1. The parameter is estimated by minimizing the sum square of errors (SSE) of the model prediction and measurement data. 
+2. By deviating from the best fitted value, the sum square of errors is expressed as a function of the parameter and has a convex "hyperbolic" curve. 
+3. After this curve is "flipped" upside down, a Gaussian curve fitting is performed to obtain the spread as the estimated variance of the model parameter.
+
+
+
+### Research Questions
+The goal of this work is to answer the following questions:
+
+1. how good the algorithm is in term of determining the variances of physical model parameters?
+2. if there is a solid statistics ground to support and backup the validity of this method? 
+3. if yes in (2), can it be improved and further generalized to any physical models?
+4. if no in (2), how well does it estimate as an approximation approach?
+
+The main challenge of this project is to verify this algorithm and use statistics theory to explain when it works. If we can find the connection, then we are able to put this novel method on a solid statistics ground with high confidence for its reliability. Brake and West, former statistics graduate students at NCSU, have made some attempts [@st542]. Unfortunately, the work is not quite complete and many unanswered questions remain.
+
+{{< pagebreak >}}
+## Methods and Data
+
+### Methods
+
+In addition to the proposed algorithm Perturbed SSE Curve Fitting (PSCF) Method, we are going to use the following statistical methods to estimate the variance of an unknown parameter of interest. These include:
+
+1. Non-linear regression model
+2. Bootstrap confidence intervals
+    i. Parametric bootstrap
+    i. Non-parametric bootstrap
+3. Delta method normality
+
+The description of these method including their analysis techniques and procedures as well as the reason why we choose them for this study are given in each corresponding section below. At the end of this report, we compare the obtained results for a side-by-side comparison to justify if these method are sufficient and powerful to estimate a model parameter compared to Perturbed SSE Curve Fitting (PSCF) Method.
+
+### Data
+
+In this study, we will look into a physical process. A physical model is used to generate simulated measurement data with a predetermined randomness in the model parameter. The detailed procedure is described in the next section.
+

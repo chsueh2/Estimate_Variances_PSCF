@@ -1,0 +1,89 @@
+---
+title: "Estimate Variances of Model Parameters Using Perturbed SSE Curve Fitting (PSCF) Method"
+author: "Chien-Lan Hsueh"
+date: "2023-04-30"
+number-sections: false
+highlight-style: github
+code-block-bg: FAFAFA
+bibliography: references.bib
+csl: american-statistical-association.csl
+format:
+  bookup-html:
+    toc: false
+    toc-depth: 3
+    df-print: paged
+    html-math-method: katex    
+  html:
+    toc: true
+    df-print: paged
+    html-math-method: katex
+  gfm:
+    toc: true
+    df_print: default
+    preview-mode: raw  
+  pdf:
+    include-in-header:
+      - \usepackage{bbm}
+    toc: true
+    df-print: kable
+    colorlinks: false
+    geometry:    
+      - left=.75in
+      - right=.75in
+      - top=.75in
+      - bottom=.75in
+      - head=0in
+      - foot=0.25in
+execute:
+  warning: false
+  message: false
+---
+
+{{< pagebreak >}}
+## Packages and Helper Functions
+
+```{r}
+#| warning: false
+#| include: true
+#| code-fold: true
+
+# packages
+if (!require("pacman")) utils::install.packages("pacman", dependencies = TRUE)
+
+pacman::p_load(
+  conflicted, here, 
+  scales, skimr, glue, gt, GGally, ggpubr, 
+  broom, nlshelper, invgamma,
+  tidyverse, zeallot
+)
+
+# resolve conflicts by setting preference
+conflict_prefer("select", "dplyr", quiet = T)
+conflict_prefer("filter", "dplyr", quiet = T)
+
+# infix operator: string concatenation (ex: "act" %&% "5")
+'%&%' <- function(x, y) paste0(x, y)
+
+# infix operator: not %in%
+'%notin%' <- Negate('%in%')
+```
+
+{{< include _p1-Intro.qmd >}}
+
+{{< include _p2a-Data.qmd >}}
+
+{{< include _p3-bestfit.qmd >}}
+
+{{< include _p4-PSCF.qmd >}}
+
+{{< include _p5-bootstrapCI.qmd >}}
+
+{{< include _p6-delta.qmd >}}
+
+{{< include _p7-conclusion.qmd >}}
+
+{{< pagebreak >}}
+## References
+
+::: {#refs}
+:::
