@@ -9,7 +9,7 @@ bibliography: references.bib
 csl: american-statistical-association.csl
 format:
   bookup-html:
-    toc: false
+    toc: true
     toc-depth: 3
     df-print: paged
     html-math-method: katex    
