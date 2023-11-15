@@ -1,6 +1,6 @@
 # Estimate Variances of Model Parameters Using Perturbed SSE Curve Fitting (PSCF) Method
 
-Perturbed SSE Curve Fitting (PSCF) Method proposed by Prof. Robert Hayes (Department of Nuclear Engineering, NCSU) is used to estimate variances of model parameters. In this work, we implement  PSCF algorithm  and compare it with the other common statistics methods including nonlinear regression models, bootstrap confidence intervals and the delta normality method.
+In this work, we implement Perturbed SSE Curve Fitting (PSCF) algorithm and compare it with the other common statistics methods including nonlinear regression models, bootstrap confidence intervals and the delta normality method.
 
 Key features:
 
@@ -37,31 +37,40 @@ Chien-Lan Hsueh (chienlan.hsueh at gmail.com)
 
 ## Overview and Project Goal
 
-Consider three different hospitals and each hospital has patients that end up with infections. We are interested whether or not the multinomials are homogenous across the hospitals.
+Perturbed SSE Curve Fitting (PSCF) Method proposed by Prof. Robert Hayes (Department of Nuclear Engineering, NCSU) is used to estimate variances of model parameters. 
 
-Conduct chi-square tests for homogeneity using R. Also manually calculate the LRT statistic, the Pearson Chi-square statistic, the critical value, and find approximate p-values for the hypotheses using both test statistics.
+- Implement Perturbed SSE Curve Fitting (PSCF) algorithm in R
+- Is this method good in estimating variances of a model parameter?
+- How does it compared to other statistical methods?
 
-- Determine how well the asymptotic rejection region performs at controlling $\alpha$
-- Determine the power of the asymptotic test when comparing certain alternative situations
 
-## Part 1 - Data Example
+## Part 1 - Introduction 
 
-Create matrix for the given hospital data and conduct chi-square tests for homogeneity. Implement the  test in R and verify the result with R build-in test function `chisq.test()`.
+Background and research questions:
 
-## Part 2 - Derivation
+  1. how good the algorithm is in term of determining the variances of physical model parameters?
+  1. if there is a solid statistics ground to support and backup the validity of this method?
+  1. if yes in (2), can it be improved and further generalized to any physical models?
+  1. if no in (2), how well does it estimate as an approximation approach?
 
-Derive the likelihood ratio test by considering the generic case of comparing $J$ independent multinomial distributions, each with $I$ categories. 
+## Part 2 - Perturbed SSE Curve Fitting (PSCF) Method
 
-## Part 3 - Simulation
+Implementation of the PSCF algorithm.
 
-The Pearson statistic can be derived as a Taylor series approximation to the LRT. Investigate the $\alpha$ control of the Pearson chi-square test and its power. 
+## Part 3 - Study case: Attenuation decay data
 
-Consider the following three different setups:
+A physical model "attenuation decay" is used to generate simulated measurement data with a predetermined randomness in the model parameter. We use PSCF method to estimate the variances of the model parameter and check how good PSCF method is.
 
-1. Two multinomial case only, where each multinomial has three categories
-1. All combinations of four sample sizes for each multinomial (16 total cases)
-1. Three different probabilities that may generate a particular multinomial
+## Part 4 - Comparison to Other Statistical Methods
 
-## Part 4 - Summarization 
+In addition to the proposed algorithm Perturbed SSE Curve Fitting (PSCF) Method, we are going to use the following statistical methods to estimate the variance of an unknown parameter of interest.
 
-Analyze and summarize the results using faceted line plots for easy comparison.
+1. Best Fit Model using Nonlinear Regression Model
+1. Bootstrapping CI
+  i. Parametric bootstrap
+  i. Non-parametric bootstrap
+1. Delta Method Normality
+
+## Part 5 - Conclusion
+
+After performing a extensive study on a simulated data set to test how well the algorithm performs in the estimating the parameter’s standard deviation, we summarize and compare the results.
