@@ -48,10 +48,10 @@ Perturbed SSE Curve Fitting (PSCF) Method proposed by Prof. Robert Hayes (Depart
 
 Background and research questions:
 
-  1. how good the algorithm is in term of determining the variances of physical model parameters?
-  1. if there is a solid statistics ground to support and backup the validity of this method?
-  1. if yes in (2), can it be improved and further generalized to any physical models?
-  1. if no in (2), how well does it estimate as an approximation approach?
+1. how good the algorithm is in term of determining the variances of physical model parameters?
+1. if there is a solid statistics ground to support and backup the validity of this method?
+1. if yes in (2), can it be improved and further generalized to any physical models?
+1. if no in (2), how well does it estimate as an approximation approach?
 
 ## Part 2 - Perturbed SSE Curve Fitting (PSCF) Method
 
@@ -67,8 +67,8 @@ In addition to the proposed algorithm Perturbed SSE Curve Fitting (PSCF) Method,
 
 1. Best Fit Model using Nonlinear Regression Model
 1. Bootstrapping CI
-  1. Parametric bootstrap
-  1. Non-parametric bootstrap
+   1. Parametric bootstrap
+   1. Non-parametric bootstrap
 1. Delta Method Normality
 
 ## Part 5 - Conclusion
