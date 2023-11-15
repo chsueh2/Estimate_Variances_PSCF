@@ -67,8 +67,8 @@ In addition to the proposed algorithm Perturbed SSE Curve Fitting (PSCF) Method,
 
 1. Best Fit Model using Nonlinear Regression Model
 1. Bootstrapping CI
-  i. Parametric bootstrap
-  i. Non-parametric bootstrap
+  1. Parametric bootstrap
+  1. Non-parametric bootstrap
 1. Delta Method Normality
 
 ## Part 5 - Conclusion
