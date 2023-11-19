@@ -2,6 +2,8 @@
 
 In this work, we implement Perturbed SSE Curve Fitting (PSCF) algorithm and compare it with the other common statistics methods including nonlinear regression models, bootstrap confidence intervals and the delta normality method.
 
+[Project report](https://rpubs.com/clh2021/1114624)
+
 Key features:
 
 - Variance Estimates
