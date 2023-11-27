@@ -76,3 +76,13 @@ In addition to the proposed algorithm Perturbed SSE Curve Fitting (PSCF) Method,
 ## Part 5 - Conclusion
 
 After performing a extensive study on a simulated data set to test how well the algorithm performs in the estimating the parameter’s standard deviation, we summarize and compare the results.
+
+![](./images/image1.png)
+
+![](./images/image2.png)
+
+![](./images/image3.png)
+
+![](./images/image4.png)
+
+![](./images/image5.png)
